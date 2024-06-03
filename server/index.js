@@ -2,8 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline');
-app.use(cors());
+const { ReadlineParser } = require('@serialport/parser-readline')
 
 const app = express();
 const server = http.createServer(app);
