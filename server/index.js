@@ -1,8 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline')
 
 const app = express();
 const server = http.createServer(app);
@@ -13,33 +11,59 @@ const io = new Server(server, {
   }
 });
 
-const port = new SerialPort({
-  path: 'COM3', 
-  baudRate: 115200
-});
+const isCloudEnvironment = process.env.IS_CLOUD === 'true';
 
-const parser = port.pipe(new ReadlineParser({ delimiter: '\r\n' }));
+let SerialPort, ReadlineParser, port, parser;
 
-port.on('open', () => {
-  console.log('Serial Port Opened');
-});
+if (isCloudEnvironment) {
+  SerialPort = function() {
+    this.write = (command, callback) => {
+      console.log(`Mock write: ${command}`);
+      if (callback) callback();
+    };
+    this.on = (event, callback) => {
+      console.log(`Mock event: ${event}`);
+    };
+    this.pipe = () => this;
+  };
+  ReadlineParser = function() {
+    return this;
+  };
+  console.log('Running in cloud environment, using mock serial port');
+} else {
+  const { SerialPort } = require('serialport');
+  const { ReadlineParser } = require('@serialport/parser-readline');
+  port = new SerialPort({
+    path: 'COM3',
+    baudRate: 115200
+  });
+  parser = port.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
-parser.on('data', (data) => {
-  console.log('Data:', data);
-  io.emit('serialData', data);
-});
+  port.on('open', () => {
+    console.log('Serial Port Opened');
+  });
+
+  parser.on('data', (data) => {
+    console.log('Data:', data);
+    io.emit('serialData', data);
+  });
+}
 
 io.on('connection', (socket) => {
   console.log('Client connected');
 
   socket.on('command', (command) => {
     console.log('Received command:', command);
-    port.write(command + '\n', (err) => {
-      if (err) {
-        return console.log('Error on write:', err.message);
-      }
-      console.log('Command written to serial port');
-    });
+    if (port) {
+      port.write(command + '\n', (err) => {
+        if (err) {
+          return console.log('Error on write:', err.message);
+        }
+        console.log('Command written to serial port');
+      });
+    } else {
+      console.log(`Mock command execution: ${command}`);
+    }
   });
 
   socket.on('disconnect', () => {
